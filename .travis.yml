@@ -30,6 +30,7 @@ before_cache:
 
 cache:
   directories:
+    - /var/lib/docker
     - $HOME/.coursier
     - $HOME/.ivy2/cache
     - $HOME/.sbt/boot/
