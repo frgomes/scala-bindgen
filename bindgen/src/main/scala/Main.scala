@@ -59,34 +59,33 @@ object Main {
 class Generator(c: Args) {
   import scala.scalanative.bindings.clang._
   import scala.scalanative.bindings.clang.api._
+  import scala.collection.mutable.ListBuffer
 
-  private val tree: Tree = Tree
+  private val tree = new Object with Tree
+  private val visitor = AST.visitor
 
   def process: Int = Zone { implicit z =>
     val clang_argc: CInt = 0
     val clang_argv: Ptr[CString] = null //TODO: c.clang_args.zipWithIndex.foreach { case (p, i) => clang_argv(i) = p }
 
-    val index: CXIndex = createIndex(0, 0)
+    val index: CXIndex = createIndex(0, 1)
 
-    c.files.foreach { file =>
-      //XXX
-      val f = java.nio.file.Paths.get(file).toFile
-      println(f.toString)
-      println(f.canRead)
-      val fname = toCString(f.toString)
-
+    c.files.foreach { name =>
+      if(c.debug) println(name)
+      val cname = toCString(name)
       val tu: CXTranslationUnit =
         parseTranslationUnit(
           index,
-          fname,
+          cname,
           clang_argv, clang_argc,
           null, 0,
           CXTranslationUnit_SkipFunctionBodies)
       val result =
         if (tu == null) -1
         else {
-          val cursor: CXCursor = getTranslationUnitCursor( tu )
-          visitChildren(cursor, Visitor.root, tree.cast[Data]).toInt
+          val root: CXCursor = getTranslationUnitCursor( tu )
+          if(c.debug) println("[about to call visitChildren]")
+          visitChildren(root, visitor, tree.cast[Data]).toInt
         }
       if(tu != null) disposeTranslationUnit( tu )
     }
@@ -98,17 +97,17 @@ class Generator(c: Args) {
     println(s"enums.size     = ${tree.enums.size}")
     println(s"functions.size = ${tree.functions.size}")
     println("----------------------------------------------")
-
+     
     tree.typedefs.foreach { entry =>
       println(s"type ${entry.name} = ${entry.underlying}")
     }
-
+     
     tree.enums.foreach { entry =>
       println(s"object ${entry.name}_Enum {")
       print(entry.values.map(enum => s"   ${enum.name} = ${enum.value}").mkString(",\n"))
       println("}")
     }
-
+     
     tree.functions.foreach { entry =>
       println(s"def ${entry.name}(")
       print(entry.args.map(param => s"    ${param.name}:${param.tpe}").mkString(",\n"))
@@ -120,46 +119,49 @@ class Generator(c: Args) {
 }
 
 
-object Visitor {
+object AST {
   import scala.collection.mutable.ListBuffer
   import scala.scalanative.bindings.clang._
   import scala.scalanative.bindings.clang.api._
 
-  val root: Visitor = (cursor: CXCursor, parent: CXCursor, data: Data) => {
-    println("Called.")
-    //++ val tree                 = data.cast[Tree]
-    //++ val kind: CXCursorKind   = getCursorKind(cursor)
-    //++  
-    //++ if (kind == CXCursor_FunctionDecl) {
-    //++   val name               = getCursorSpelling(cursor)
-    //++   val cursorType         = getCursorType(cursor)
-    //++   val returnType         = getResultType(cursorType)
-    //++   val returnTypeSpelling = getTypeSpelling(returnType)
-    //++   val argc               = Cursor_getNumArguments(cursor)
-    //++  
-    //++   tree.functions += Function(fromCString(name), fromCString(returnTypeSpelling), functionParams(cursor))
-    //++  
-    //++ } else if (kind == CXCursor_EnumDecl) {
-    //++   val name       = getCursorSpelling(cursor)
-    //++   val enumType   = getEnumDeclIntegerType(cursor)
-    //++   val enumValues = ListBuffer[Enum.Value]()
-    //++  
-    //++   visitChildren(cursor, enumVisitor, enumValues.cast[Data])
-    //++  
-    //++   tree.enums += Enum(fromCString(name), List(enumValues: _*))
-    //++  
-    //++ } else if (kind == CXCursor_TypedefDecl) {
-    //++   val name                = getCursorSpelling(cursor)
-    //++   val typedefType         = getTypedefDeclUnderlyingType(cursor)
-    //++   val typedefTypeSpelling = getTypeSpelling(typedefType)
-    //++  
-    //++   tree.typedefs += Typedef(fromCString(name), fromCString(typedefTypeSpelling))
-    //++  
-    //++ } else {
-    //++   val name         = getCursorSpelling(cursor)
-    //++   val kindSpelling = getCursorKindSpelling(kind)
-    //++   println(s"Unhandled cursor kind for ${name}: ${kindSpelling}")
-    //++ }
+  def visitor: Visitor = (cursor: CXCursor, parent: CXCursor, data: Data) => {
+
+    val tree                 = data.cast[Tree]
+    val kind: CXCursorKind   = getCursorKind(cursor)
+
+    // insert some fake data
+    tree.typedefs += Typedef(fromCString(c"name"), fromCString(c"typedefTypeSpelling"))
+     
+    if (kind == CXCursor_FunctionDecl) {
+      val name               = getCursorSpelling(cursor)
+      val cursorType         = getCursorType(cursor)
+      val returnType         = getResultType(cursorType)
+      val returnTypeSpelling = getTypeSpelling(returnType)
+      val argc               = Cursor_getNumArguments(cursor)
+     
+      tree.functions += Function(fromCString(name), fromCString(returnTypeSpelling), functionParams(cursor))
+     
+    } else if (kind == CXCursor_EnumDecl) {
+      val name       = getCursorSpelling(cursor)
+      val enumType   = getEnumDeclIntegerType(cursor)
+      val enumValues = ListBuffer[Enum.Value]()
+     
+      visitChildren(cursor, enumVisitor, enumValues.cast[Data])
+     
+      tree.enums += Enum(fromCString(name), List(enumValues: _*))
+     
+    } else if (kind == CXCursor_TypedefDecl) {
+      val name                = getCursorSpelling(cursor)
+      val typedefType         = getTypedefDeclUnderlyingType(cursor)
+      val typedefTypeSpelling = getTypeSpelling(typedefType)
+     
+      tree.typedefs += Typedef(fromCString(name), fromCString(typedefTypeSpelling))
+     
+    } else {
+      val name         = getCursorSpelling(cursor)
+      val kindSpelling = getCursorKindSpelling(kind)
+      println(s"Unhandled cursor kind for ${name}: ${kindSpelling}")
+    }
 
     CXChildVisit_Continue
   }
@@ -207,8 +209,6 @@ trait Tree {
   val functions: ListBuffer[Function] = ListBuffer()
   val enums    : ListBuffer[Enum]     = ListBuffer()
 }
-object Tree extends Tree
-
 
 sealed trait Node
 case class Typedef (name: String, underlying: String) extends Node
