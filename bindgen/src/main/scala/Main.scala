@@ -146,14 +146,6 @@ object AST {
     val tree                 = data.cast[Tree]
     val kind: CXCursorKind   = getCursorKind(cursor)
 
-    //XXX insert some fake data
-    tree.typedefs  += Typedef("data", "Array[Byte]") //XXX
-    tree.enums     += Enum("weekend", List(Enum.Value("Sat", 7L), Enum.Value("Sun", 7L))) //XXX
-    tree.functions += Function("f", "Int", List(Function.Param("index", "Int"))) //XXX
-    //XXX should crash if this function is being called
-    val n = 0
-    val crash = 1 / n
-
     if (kind == CXCursor_FunctionDecl) {
       val name               = getCursorSpelling(cursor)
       val cursorType         = getCursorType(cursor)
