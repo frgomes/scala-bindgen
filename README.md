@@ -16,7 +16,7 @@ Install requirements:
     
 Now you can build and run:
 
-    $ sbt clean nativeLink 'bingen/run test/test001.h'
+    $ sbt clean nativeLink 'bindgen/run test/test001.h'
 
 
 ## Usage
