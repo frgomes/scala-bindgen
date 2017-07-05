@@ -1,8 +1,10 @@
 type SomeInt = int
 object color_Enum {
-   RED = 1,
-   GREEN = 2,
-   BLUE = 100}
+  val RED = 1
+  val GREEN = 2
+  val BLUE = 100
+}
 def strchr(
-    s:const char *,
-    c:int  ): char * = extern
+  s: const char *
+  c: int
+  ): char * = extern

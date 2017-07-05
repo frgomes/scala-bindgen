@@ -1,2 +1,3 @@
 def acall(
-    c:int  ): int = extern
+  c: int
+  ): int = extern

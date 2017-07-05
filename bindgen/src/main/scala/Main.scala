@@ -91,15 +91,12 @@ class Generator(c: Args) {
             null, 0,
             CXTranslationUnit_SkipFunctionBodies)
         assert(tu != null) //XXX: This causes link error
-        if(tu == null) println("   assert(tu != null)")
         if (tu == null) -1
         else {
           val root: CXCursor = getTranslationUnitCursor( tu )
-          if(root == null) println("   assert(root != null)")
+          assert(root != null)
           if(c.debug) println("[about to call visitChildren]")
           val result = visitChildren(root, visitor, tree.cast[Data])
-          println(s"   result=${result}")
-          if(result != CXChildVisit_Continue) println("   assert(result == CXChildVisit_Continue)")
           disposeTranslationUnit( tu )
           result.toInt
         }
@@ -118,13 +115,13 @@ class Generator(c: Args) {
 
     tree.enums.foreach { entry =>
       c.out.println(s"object ${entry.name}_Enum {")
-      c.out.print(entry.values.map(enum => s"   ${enum.name} = ${enum.value}").mkString(",\n"))
+      c.out.println(entry.values.map(enum => s"  val ${enum.name} = ${enum.value}").mkString("\n"))
       c.out.println("}")
     }
 
     tree.functions.foreach { entry =>
       c.out.println(s"def ${entry.name}(")
-      c.out.print(entry.args.map(param => s"    ${param.name}:${param.tpe}").mkString(",\n"))
+      c.out.println(entry.args.map(param => s"  ${param.name}: ${param.tpe}").mkString("\n"))
       c.out.println(s"  ): ${entry.returnType} = extern")
     }
 
