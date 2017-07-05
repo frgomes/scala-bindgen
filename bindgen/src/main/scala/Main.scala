@@ -51,7 +51,7 @@ object Main {
         case Some(a) => val g = new Generator(a); g.process
         case None       => -1 // arguments are bad, error message will have been displayed
       }
-    println(s"errno = ${errno}")
+    System.exit(errno)
   }
 }
 
@@ -69,27 +69,24 @@ class Generator(c: Args) {
     val clang_argv: Ptr[CString] = null //TODO: c.clang_args.zipWithIndex.foreach { case (p, i) => clang_argv(i) = p }
 
     val index: CXIndex = createIndex(0, 1)
-
-    c.files.foreach { name =>
-      if(c.debug) println(name)
-      val cname = toCString(name)
-      val tu: CXTranslationUnit =
-        parseTranslationUnit(
-          index,
-          cname,
-          clang_argv, clang_argc,
-          null, 0,
-          CXTranslationUnit_SkipFunctionBodies)
-      val result =
+    val xs =
+      c.files.map { name =>
+        if(c.debug) println(name)
+        val tu: CXTranslationUnit =
+          parseTranslationUnit(
+            index,
+            toCString(name),
+            clang_argv, clang_argc,
+            null, 0,
+            CXTranslationUnit_SkipFunctionBodies)
         if (tu == null) -1
         else {
           val root: CXCursor = getTranslationUnitCursor( tu )
           if(c.debug) println("[about to call visitChildren]")
-          visitChildren(root, visitor, tree.cast[Data]).toInt
+          val result = visitChildren(root, visitor, tree.cast[Data]).toInt
+          disposeTranslationUnit( tu )
         }
-      if(tu != null) disposeTranslationUnit( tu )
-    }
-
+      }
     if(index != null) disposeIndex( index )
 
     println("----------------------------------------------")
@@ -129,9 +126,14 @@ object AST {
     val tree                 = data.cast[Tree]
     val kind: CXCursorKind   = getCursorKind(cursor)
 
-    // insert some fake data
-    tree.typedefs += Typedef(fromCString(c"name"), fromCString(c"typedefTypeSpelling"))
-     
+    //XXX insert some fake data
+    tree.typedefs  += Typedef("data", "Array[Byte]") //XXX
+    tree.enums     += Enum("weekend", List(Enum.Value("Sat", 7L), Enum.Value("Sun", 7L))) //XXX
+    tree.functions += Function("f", "Int", List(Function.Param("index", "Int"))) //XXX
+    //XXX should crash if this function is being called
+    val n = 0
+    val crash = 1 / n
+
     if (kind == CXCursor_FunctionDecl) {
       val name               = getCursorSpelling(cursor)
       val cursorType         = getCursorType(cursor)
@@ -166,7 +168,7 @@ object AST {
     CXChildVisit_Continue
   }
 
-  def functionParam(i: Int, parent: CXCursor) = {
+  def functionParam(i: Int, parent: CXCursor): Function.Param = {
     val cursor       = Cursor_getArgument(parent, i)
     val tpe          = getCursorType(cursor)
     val name         = getCursorSpelling(cursor)
@@ -177,7 +179,7 @@ object AST {
     Function.Param(nonEmptyName, fromCString(typeSpelling))
   }
 
-  def functionParams(cursor: CXCursor) = {
+  def functionParams(cursor: CXCursor): Seq[Function.Param] = {
     val argc = Cursor_getNumArguments(cursor)
     var i    = 0
     var args = List.empty[Function.Param]
@@ -202,7 +204,6 @@ object AST {
 }
 
 
-
 trait Tree {
   import scala.collection.mutable.ListBuffer
   val typedefs : ListBuffer[Typedef]  = ListBuffer()
@@ -212,8 +213,8 @@ trait Tree {
 
 sealed trait Node
 case class Typedef (name: String, underlying: String) extends Node
-case class Function(name: String, returnType: String, args: List[Function.Param]) extends Node
-case class Enum    (name: String, values: List[Enum.Value]) extends Node
+case class Function(name: String, returnType: String, args: Seq[Function.Param]) extends Node
+case class Enum    (name: String, values: Seq[Enum.Value]) extends Node
 
 object Function {
   case class Param(name: String, tpe: String)

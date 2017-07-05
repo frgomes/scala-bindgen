@@ -21,7 +21,7 @@ script:
       -v $HOME/.ivy2:/root/.ivy2 \
       -t rgomes/scalanative:1.0-M1 /bin/bash -c \
          " cd /root/scala-bindgen; \
-           sbt clean bindgen/nativeLink 'bindgen/run -d test/test001.h' "
+           sbt clean bindgen/nativeLink 'bindgen/run -d test/test000.h test/test001.h' "
 
 before_cache:
   - find $HOME/.sbt -name "*.lock" | xargs rm
