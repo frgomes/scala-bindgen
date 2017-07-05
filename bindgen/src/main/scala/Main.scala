@@ -1,5 +1,6 @@
 package bindgen
 
+import java.io.{File, FileOutputStream, PrintStream}
 import scalanative.native._
 
 //see: http://bastian.rieck.ru/blog/posts/2015/baby_steps_libclang_ast/
@@ -9,6 +10,7 @@ case class Args(
   files    : Seq[String] = Seq(),
   chdir    : String      = ".",
   pkg      : String      = "scalanative.native.bindings",
+  out      : PrintStream = System.out,
   recursive: Boolean     = false,
   debug    : Boolean     = false)
 
@@ -16,7 +18,7 @@ object CLI {
   //TODO: allow Clang args to be passed after a "--"
   val parser = new scopt.OptionParser[Args]("bindgen") {
     head("bindgen", "0.1")
-   
+
     arg[String]("files...").unbounded().optional()
       .action( (x, c) => c.copy(files = c.files :+ x) )
       .text("""Header file(s) to be converted to Scala.""")
@@ -28,6 +30,14 @@ object CLI {
     opt[String]('P', "package").valueName("PACKAGE")
       .action( (x, c) => c.copy(pkg = x) )
       .text("""Package name.""")
+
+    opt[String]('o', "out").valueName("FILE")
+      .action{ (x, c) =>
+        val file = new File(x)
+        file.getParentFile().mkdirs()
+        c.copy(out = new PrintStream(new FileOutputStream(file)))
+      }
+      .text("""Output file.""")
 
     opt[Unit]('r', "recursive")
       .action( (_, c) => c.copy(recursive = true) )
@@ -51,6 +61,7 @@ object Main {
         case Some(a) => val g = new Generator(a); g.process
         case None       => -1 // arguments are bad, error message will have been displayed
       }
+
     System.exit(errno)
   }
 }
@@ -100,22 +111,25 @@ class Generator(c: Args) {
     println(s"enums.size     = ${tree.enums.size}")
     println(s"functions.size = ${tree.functions.size}")
     println("----------------------------------------------")
-     
+
     tree.typedefs.foreach { entry =>
-      println(s"type ${entry.name} = ${entry.underlying}")
+      c.out.println(s"type ${entry.name} = ${entry.underlying}")
     }
-     
+
     tree.enums.foreach { entry =>
-      println(s"object ${entry.name}_Enum {")
-      print(entry.values.map(enum => s"   ${enum.name} = ${enum.value}").mkString(",\n"))
-      println("}")
+      c.out.println(s"object ${entry.name}_Enum {")
+      c.out.print(entry.values.map(enum => s"   ${enum.name} = ${enum.value}").mkString(",\n"))
+      c.out.println("}")
     }
-     
+
     tree.functions.foreach { entry =>
-      println(s"def ${entry.name}(")
-      print(entry.args.map(param => s"    ${param.name}:${param.tpe}").mkString(",\n"))
-      println(s"  ): ${entry.returnType} = extern")
+      c.out.println(s"def ${entry.name}(")
+      c.out.print(entry.args.map(param => s"    ${param.name}:${param.tpe}").mkString(",\n"))
+      c.out.println(s"  ): ${entry.returnType} = extern")
     }
+
+    c.out.flush()
+    c.out.close()
 
     0 //TODO: obtain from iterator
   }
@@ -131,7 +145,7 @@ object AST {
 
     val tree                 = data.cast[Tree]
     val kind: CXCursorKind   = getCursorKind(cursor)
-     
+
     //XXX insert some fake data
     tree.typedefs  += Typedef("data", "Array[Byte]") //XXX
     tree.enums     += Enum("weekend", List(Enum.Value("Sat", 7L), Enum.Value("Sun", 7L))) //XXX
@@ -139,32 +153,32 @@ object AST {
     //XXX should crash if this function is being called
     val n = 0
     val crash = 1 / n
-     
+
     if (kind == CXCursor_FunctionDecl) {
       val name               = getCursorSpelling(cursor)
       val cursorType         = getCursorType(cursor)
       val returnType         = getResultType(cursorType)
       val returnTypeSpelling = getTypeSpelling(returnType)
       val argc               = Cursor_getNumArguments(cursor)
-     
+
       tree.functions += Function(fromCString(name), fromCString(returnTypeSpelling), functionParams(cursor))
-     
+
     } else if (kind == CXCursor_EnumDecl) {
       val name       = getCursorSpelling(cursor)
       val enumType   = getEnumDeclIntegerType(cursor)
       val enumValues = ListBuffer[Enum.Value]()
-     
+
       visitChildren(cursor, enumVisitor, enumValues.cast[Data])
-     
+
       tree.enums += Enum(fromCString(name), List(enumValues: _*))
-     
+
     } else if (kind == CXCursor_TypedefDecl) {
       val name                = getCursorSpelling(cursor)
       val typedefType         = getTypedefDeclUnderlyingType(cursor)
       val typedefTypeSpelling = getTypeSpelling(typedefType)
-     
+
       tree.typedefs += Typedef(fromCString(name), fromCString(typedefTypeSpelling))
-     
+
     } else {
       val name         = getCursorSpelling(cursor)
       val kindSpelling = getCursorKindSpelling(kind)
