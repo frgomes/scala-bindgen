@@ -79,12 +79,18 @@ class Generator(c: Args) {
             clang_argv, clang_argc,
             null, 0,
             CXTranslationUnit_SkipFunctionBodies)
+        assert(tu != null) //XXX: This causes link error
+        if(tu == null) println("   assert(tu != null)")
         if (tu == null) -1
         else {
           val root: CXCursor = getTranslationUnitCursor( tu )
+          if(root == null) println("   assert(root != null)")
           if(c.debug) println("[about to call visitChildren]")
-          val result = visitChildren(root, visitor, tree.cast[Data]).toInt
+          val result = visitChildren(root, visitor, tree.cast[Data])
+          println(s"   result=${result}")
+          if(result != CXChildVisit_Continue) println("   assert(result == CXChildVisit_Continue)")
           disposeTranslationUnit( tu )
+          result.toInt
         }
       }
     if(index != null) disposeIndex( index )
@@ -125,7 +131,7 @@ object AST {
 
     val tree                 = data.cast[Tree]
     val kind: CXCursorKind   = getCursorKind(cursor)
-
+     
     //XXX insert some fake data
     tree.typedefs  += Typedef("data", "Array[Byte]") //XXX
     tree.enums     += Enum("weekend", List(Enum.Value("Sat", 7L), Enum.Value("Sun", 7L))) //XXX
@@ -133,7 +139,7 @@ object AST {
     //XXX should crash if this function is being called
     val n = 0
     val crash = 1 / n
-
+     
     if (kind == CXCursor_FunctionDecl) {
       val name               = getCursorSpelling(cursor)
       val cursorType         = getCursorType(cursor)
