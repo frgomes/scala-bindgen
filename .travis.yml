@@ -21,7 +21,6 @@ script:
       -v $HOME/.ivy2:/root/.ivy2 \
       -t rgomes/scalanative:1.0-M1 /bin/bash -c \
          " cd /root/scala-bindgen; \
-           ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config; \
            sbt clean tests/test"
 
 before_cache:
