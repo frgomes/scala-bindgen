@@ -1,8 +1,4 @@
-enum color {
-  RED = 1,
-  GREEN,
-  BLUE = 100
-};
+enum color { RED = 1, GREEN, BLUE = 100 };
 
 typedef int SomeInt;
 

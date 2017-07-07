@@ -1,5 +1,7 @@
 *~
-target
+bin/.coursier
+bin/.scalafmt*
+target/
 /.classpath
 /.project
 /.settings

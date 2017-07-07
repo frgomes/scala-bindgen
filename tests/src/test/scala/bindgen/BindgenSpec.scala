@@ -20,7 +20,8 @@ class BindgenSpec extends FunSpec {
     for {
       input <- inputDirectory.listFiles()
       if input.getName.endsWith(".h")
-      expected = new File(inputDirectory, input.getName.replace(".h", ".scala"))
+      expected = new File(inputDirectory,
+                          input.getName.replace(".h", ".scala"))
       if expected.exists()
     } {
       it(s"should generate bindings for ${input.getName}") {
@@ -28,7 +29,8 @@ class BindgenSpec extends FunSpec {
         val bin = sys.props.get("native.bin").getOrElse {
           sys.error("native.bin is not set")
         }
-        val cmd = Array(bin, "-o", output.getAbsolutePath, input.getAbsolutePath)
+        val cmd =
+          Array(bin, "-o", output.getAbsolutePath, input.getAbsolutePath)
 
         assert(Process(cmd).! == 0)
         assert(output.exists())
