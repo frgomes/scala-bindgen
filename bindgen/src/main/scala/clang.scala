@@ -4,18 +4,18 @@ package bindings
 object clang {
   import scalanative.native._
 
-  type Data = Ptr[Byte]
-  type CXIndex = Ptr[Byte]
-  type CXCursor = Ptr[Byte]
-  type CXType = Ptr[Byte]
+  type Data              = Ptr[Byte]
+  type CXIndex           = Ptr[Byte]
+  type CXCursor          = Ptr[Byte]
+  type CXType            = Ptr[Byte]
   type CXTranslationUnit = Ptr[Byte]
-  type CXUnsavedFile = Ptr[Byte]
-  type Visitor = CFunctionPtr3[CXCursor, CXCursor, Data, UInt]
+  type CXUnsavedFile     = Ptr[Byte]
+  type Visitor           = CFunctionPtr3[CXCursor, CXCursor, Data, UInt]
 
-  type CXCursorKind = UInt
-  type CXTypeKind = UInt
+  type CXCursorKind            = UInt
+  type CXTypeKind              = UInt
   type CXTranslationUnit_Flags = UInt
-  type CXChildVisitResult = UInt
+  type CXChildVisitResult      = UInt
 
   @extern
   @link("clang")
@@ -45,7 +45,8 @@ object clang {
     def CXTranslationUnit_None(): CXTranslationUnit_Flags = extern
 
     @name("bindgen_clang_CXTranslationUnit_SkipFunctionBodies")
-    def CXTranslationUnit_SkipFunctionBodies(): CXTranslationUnit_Flags = extern
+    def CXTranslationUnit_SkipFunctionBodies(): CXTranslationUnit_Flags =
+      extern
 
     @name("bindgen_clang_CXChildVisit_Break")
     def CXChildVisit_Break(): CXChildVisitResult = extern
@@ -237,16 +238,24 @@ object clang {
     def Cursor_getArgument(cursor: CXCursor, i: CInt): CXCursor = extern
 
     @name("bindgen_clang_visitChildren")
-    def visitChildren(parent: CXCursor, visitor: Visitor, data: Data): UInt = extern
+    def visitChildren(parent: CXCursor, visitor: Visitor, data: Data): UInt =
+      extern
 
     @name("clang_createIndex")
-    def createIndex(excludeDeclarationsFromPCH: CInt, displayDiagnostics: CInt): CXIndex = extern
+    def createIndex(excludeDeclarationsFromPCH: CInt,
+                    displayDiagnostics: CInt): CXIndex = extern
 
     @name("clang_disposeIndex")
     def disposeIndex(index: CXIndex): Unit = extern
 
     @name("clang_parseTranslationUnit")
-    def parseTranslationUnit(index: CXIndex, fileName: CString, argv: Ptr[CString], argc: CInt, unsavedFiles: CXUnsavedFile, numUnsavedFiles: CInt, options: UInt): CXTranslationUnit = extern
+    def parseTranslationUnit(index: CXIndex,
+                             fileName: CString,
+                             argv: Ptr[CString],
+                             argc: CInt,
+                             unsavedFiles: CXUnsavedFile,
+                             numUnsavedFiles: CInt,
+                             options: UInt): CXTranslationUnit = extern
 
     @name("clang_disposeTranslationUnit")
     def disposeTranslationUnit(unit: CXTranslationUnit): Unit = extern

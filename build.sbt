@@ -11,14 +11,16 @@ lazy val platform: Seq[Setting[_]] =
         "org.scala-native" %%% "nativelib" % "0.3.1",
         "org.scala-native" %%% "javalib"   % "0.3.1",
         "org.scala-native" %%% "scalalib"  % "0.3.1",
-        "com.github.scopt" %%% "scopt"     % "3.6.0"))
+        "com.github.scopt" %%% "scopt"     % "3.6.0"
+      )
+  )
 
 lazy val disableDocs: Seq[Setting[_]] =
-  Seq(
-      sources in doc in Compile := List())
+  Seq(sources in doc in Compile := List())
 
 lazy val bindgen =
-  project.in(file("bindgen"))
+  project
+    .in(file("bindgen"))
     .enablePlugins(ScalaNativePlugin)
     .settings(platform)
     .settings(
@@ -49,9 +51,12 @@ lazy val bindgen =
 //      nativeClangOptions ++= Seq("-O2"))
 
 lazy val tests =
-  project.in(file("tests"))
+  project
+    .in(file("tests"))
     .settings(
       fork in Test := true,
-      javaOptions in Test += "-Dnative.bin=" + nativeLinkLL.in(bindgen, Compile).value,
+      javaOptions in Test += "-Dnative.bin=" + nativeLinkLL
+        .in(bindgen, Compile)
+        .value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % Test
     )
