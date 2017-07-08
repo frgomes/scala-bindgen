@@ -81,7 +81,7 @@ object Test extends TestSuite {
           val out   = null // assuming defaults means that this can be either null or ""
           val default  = null
           intercept[IllegalArgumentException] {
-            util.resolve(chdir, out, default, ".h", ".scala")
+            util.resolve(chdir:String, out, default, ".h", ".scala")
           }
         }
       }

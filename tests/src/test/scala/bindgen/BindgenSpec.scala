@@ -27,13 +27,12 @@ object BindgenSpec extends TestSuite {
   val tests = this {
     "ability to generate bindings"-{
       for {
-        input <- inputDir.listFiles()                                        if input.getName.endsWith(".h")
-        expected = util.resolve(null, null, input.toString, ".h", ".scala")  if (new File(expected)).exists
+        input <- inputDir.listFiles()                                                if input.getName.endsWith(".h")
+        expected = util.resolve(None, None, Option(input.toString), ".h", ".scala")  if (new File(expected)).exists
       } {
-        val actual = util.resolve(outputDir.toString, null, input.toString, ".h", ".scala")
-        println(s"Generating bindings file: ${actual}")
+        val actual = util.resolve(Option(outputDir.toString), None, Option(input.toString), ".h", ".scala")
 
-        val cmd = Array(bin, "-o", actual, input.toString)
+        val cmd = Array(bin, "-v", "-d", "-o", actual, input.toString)
         assert(Process(cmd).! == 0)
 
         assert((new File(actual)).exists)
@@ -51,6 +50,7 @@ trait FileUtils {
   import java.nio.file.Paths
   import java.nio.file.Path
 
+ // def mkdirs(name: Option[String])
   def mkdirs(name: String): File = mkdirs(Paths.get(name).toFile)
   def mkdirs(file: java.io.File): File = {
     val dir = file.getParentFile
@@ -60,27 +60,47 @@ trait FileUtils {
     file
   }
 
-  def resolve(chdir: String, name: String): String = {
-    val dir  = if(null==chdir || ""==chdir) "." else chdir
-    val path = Paths.get(name)
+  private def resolve(chdir: Option[String], name: Option[String]): String = {
+    val dir  =
+      chdir match {
+        case None     => "."
+        case Some("") => "."
+        case Some(d)  => d
+      }
+    val path =
+      if(name.isEmpty)
+        throw new IllegalArgumentException("Cannot access a null name.")
+      else
+        Paths.get(name.get)
     if(path.isAbsolute) path.toString else Paths.get(dir, path.toString).toString
   }
 
-  def resolve(chdir: String, name: String, default: String): String =
-    (if(name==null) "" else name) match {
-      case "-" => "-"
-      case ""  => resolve(chdir, default)
-      case _   => resolve(chdir, name)
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String]): String =
+    name match {
+      case Some("-") => "-"
+      case None      => resolve(chdir, default)
+      case Some("")  => resolve(chdir, default)
+      case _         => resolve(chdir, name)
     }
 
-  def resolve(chdir: String, name: String, default: String, from: String, to: String): String =
-    (if(name==null) "" else name) match {
-      case "-" => "-"
-      case ""  =>
-        if(default==null)
-          throw new IllegalArgumentException("Cannot enforce extension on a null default name.")
-        else
-          resolve(chdir, default.replace(from, to))
-      case _   => resolve(chdir, name)
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String], from: String, to: String): String = {
+    def replaceThenResolve: String = {
+        val name = default.getOrElse(throw new IllegalArgumentException("Cannot enforce extension on a null default name."))
+        resolve(chdir, Option(name.replace(from, to)))
     }
+    name match {
+      case Some("-") => "-"
+      case None      => replaceThenResolve
+      case Some("")  => replaceThenResolve
+      case _         => resolve(chdir, name)
+    }
+  }
+
+  // Java-like API
+
+  def resolve(chdir: String, name: String, default: String): String =
+    resolve(Option(chdir), Option(name), Option(default))
+
+  def resolve(chdir: String, name: String, default: String, from: String, to: String): String =
+    resolve(Option(chdir), Option(name), Option(default), from, to)
 }

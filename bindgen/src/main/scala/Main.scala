@@ -3,13 +3,13 @@ package bindgen
 import scalanative.native._
 
 
-case class Args(files: Seq[String] = Seq(),
-                chdir: String = ".",
-                pkg: String = "scalanative.native.bindings",
-                out: String = "",
-                recursive: Boolean = false,
-                verbose: Int = 0,
-                debug: Boolean = false)
+case class Args(files: Seq[String]    = Seq(),
+                chdir: Option[String] = None,
+                pkg: Option[String]   = Some("scalanative.native.bindings"),
+                out: Option[String]   = None,
+                recursive: Boolean    = false,
+                verbose: Int          = 0,
+                debug: Boolean        = false)
 
 object CLI {
   val parser = new scopt.OptionParser[Args]("bindgen") {
@@ -22,19 +22,20 @@ object CLI {
       .text("""Header file(s) to be converted to Scala.""")
 
     opt[String]('C', "chdir")
+      .optional
       .valueName("DIR")
-      .action((x, c) => c.copy(chdir = x))
+      .action((x, c) => c.copy(chdir = Option(x)))
       .text("""Change to DIR before performing any operations.""")
 
     opt[String]('P', "package")
       .valueName("PACKAGE")
-      .action((x, c) => c.copy(pkg = x))
+      .action((x, c) => c.copy(pkg = Option(x)))
       .text("""Package name.""")
 
     opt[String]('o', "out")
       .optional
       .valueName("FILE")
-      .action((x, c) => c.copy(out = x))
+      .action((x, c) => c.copy(out = Option(x)))
       .text("""Unified output file.""")
 
     opt[Unit]('r', "recursive")
@@ -87,7 +88,8 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
     val index: CXIndex = createIndex(0, 1)
     val xs =
       args.files.map { name =>
-        if (args.verbose > 0) cerr.println(name)
+        if (args.debug || args.verbose > 0) cerr.println("----------------------------------------------")
+        if (args.verbose > 1) cerr.println(s"[${name}]")
         val tu: CXTranslationUnit =
           parseTranslationUnit(index,
                                toCString(name),
@@ -97,16 +99,14 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
                                0,
                                CXTranslationUnit_SkipFunctionBodies)
         assert(tu != null)
-        if (tu == null) -1
-        else {
-          val root: CXCursor = getTranslationUnitCursor(tu)
-          assert(root != null)
-          val result = visitChildren(root, visitor, tree.cast[Data]).toInt
-          if(args.verbose > 0) println(s"${result} ${name}")
-          if(result==0) makeOutput(tree, resolve(args.chdir, args.out, name, ".h", ".scala"))
-          disposeTranslationUnit(tu)
-          result
-        }
+        val root: CXCursor = getTranslationUnitCursor(tu)
+        assert(root != null)
+        val result = visitChildren(root, visitor, tree.cast[Data]).toInt
+        if(args.verbose > 0) println(s"${result} ${name}")
+        if(result==0) makeOutput(tree, resolve(args.chdir, args.out, Option(name), ".h", ".scala"))
+        disposeTranslationUnit(tu)
+        if (args.debug || args.verbose > 0) cerr.println("----------------------------------------------")
+        result
       }
     if (index != null) disposeIndex(index)
     xs.sum
@@ -116,11 +116,9 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
     val cout = if("-" == out) new PrintStream(System.out) else new PrintStream(new FileOutputStream(mkdirs(out)))
 
     if(args.debug) {
-      cerr.println("----------------------------------------------")
       cerr.println(s"typedefs.size  = ${tree.typedefs.size}")
       cerr.println(s"enums.size     = ${tree.enums.size}")
       cerr.println(s"functions.size = ${tree.functions.size}")
-      cerr.println("----------------------------------------------")
     }
 
     tree.typedefs.foreach { entry =>
@@ -156,6 +154,7 @@ trait FileUtils {
   import java.nio.file.Paths
   import java.nio.file.Path
 
+ // def mkdirs(name: Option[String])
   def mkdirs(name: String): File = mkdirs(Paths.get(name).toFile)
   def mkdirs(file: java.io.File): File = {
     val dir = file.getParentFile
@@ -165,29 +164,49 @@ trait FileUtils {
     file
   }
 
-  def resolve(chdir: String, name: String): String = {
-    val dir  = if(null==chdir || ""==chdir) "." else chdir
-    val path = Paths.get(name)
+  private def resolve(chdir: Option[String], name: Option[String]): String = {
+    val dir  =
+      chdir match {
+        case None     => "."
+        case Some("") => "."
+        case Some(d)  => d
+      }
+    val path =
+      if(name.isEmpty)
+        throw new IllegalArgumentException("Cannot access a null name.")
+      else
+        Paths.get(name.get)
     if(path.isAbsolute) path.toString else Paths.get(dir, path.toString).toString
   }
 
-  def resolve(chdir: String, name: String, default: String): String =
-    (if(name==null) "" else name) match {
-      case "-" => "-"
-      case ""  => resolve(chdir, default)
-      case _   => resolve(chdir, name)
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String]): String =
+    name match {
+      case Some("-") => "-"
+      case None      => resolve(chdir, default)
+      case Some("")  => resolve(chdir, default)
+      case _         => resolve(chdir, name)
     }
 
-  def resolve(chdir: String, name: String, default: String, from: String, to: String): String =
-    (if(name==null) "" else name) match {
-      case "-" => "-"
-      case ""  =>
-        if(default==null)
-          throw new IllegalArgumentException("Cannot enforce extension on a null default name.")
-        else
-          resolve(chdir, default.replace(from, to))
-      case _   => resolve(chdir, name)
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String], from: String, to: String): String = {
+    def replaceThenResolve: String = {
+        val name = default.getOrElse(throw new IllegalArgumentException("Cannot enforce extension on a null default name."))
+        resolve(chdir, Option(name.replace(from, to)))
     }
+    name match {
+      case Some("-") => "-"
+      case None      => replaceThenResolve
+      case Some("")  => replaceThenResolve
+      case _         => resolve(chdir, name)
+    }
+  }
+
+  // Java-like API
+
+  def resolve(chdir: String, name: String, default: String): String =
+    resolve(Option(chdir), Option(name), Option(default))
+
+  def resolve(chdir: String, name: String, default: String, from: String, to: String): String =
+    resolve(Option(chdir), Option(name), Option(default), from, to)
 }
 
 object AST {
