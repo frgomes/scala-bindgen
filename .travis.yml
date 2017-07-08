@@ -26,10 +26,11 @@ script:
            pushd utest; \
            sbt clean +publishLocal; \
            popd; \
+           wget -O /tmp/utest_native0.3_2.11.jar https://www.dropbox.com/sh/bb3p4grafp0027a/AAB7-L1d6fkNmVPVVajua5vRa/utest_native0.3_2.11.jar; \
            cd /root/scala-bindgen; \
            bin/scalafmt --test; \
            bin/clangfmt --test; \
-           sbt clean tests/test"
+           sbt clean bindgen/test tests/test"
 
 before_cache:
   - find $HOME/.sbt -name "*.lock" | xargs rm
