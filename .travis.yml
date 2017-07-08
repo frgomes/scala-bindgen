@@ -21,9 +21,10 @@ script:
       -v $HOME/.ivy2:/root/.ivy2 \
       -t rgomes/scalanative:1.0-M1 /bin/bash -c \
          " cd /root; \
+           rm -r -f ~/.ivy2/cache/com.lihaoyi/ ~/.ivy2/local/com.lihaoyi/; \
            git clone https://github.com/lihaoyi/utest; \
            pushd utest; \
-           sbt clean publishLocal; \
+           sbt clean +publishLocal; \
            popd; \
            cd /root/scala-bindgen; \
            bin/scalafmt --test; \
