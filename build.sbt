@@ -15,6 +15,13 @@ lazy val platform: Seq[Setting[_]] =
       )
   )
 
+lazy val testSettings: Seq[Setting[_]] =
+  Seq(
+    fork in Test := true,
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.4.8-SNAPSHOT" % "test",
+    testFrameworks += new TestFramework("utest.runner.Framework")
+  )
+
 lazy val disableDocs: Seq[Setting[_]] =
   Seq(sources in doc in Compile := List())
 
@@ -23,10 +30,8 @@ lazy val bindgen =
     .in(file("bindgen"))
     .enablePlugins(ScalaNativePlugin)
     .settings(platform)
+    .settings(testSettings)
     .settings(
-      fork in Test := true,
-      javaOptions in Test += "-Dnative.bin=" + (nativeLinkLL in Compile).value,
-      libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0" % Test,
       nativeCompileLL in Compile += {
         val compiler = (nativeClang in Compile).value.getAbsolutePath
         val opts     = (nativeCompileOptions in Compile).value
@@ -45,18 +50,14 @@ lazy val bindgen =
         opath
       }
     )
-//    .settings(disableDocs)
-//    .settings(
-//      nativeVerbose := true,
-//      nativeClangOptions ++= Seq("-O2"))
+    .settings(
+      javaOptions in Test += "-Dnative.bin=" + (nativeLinkLL in Compile).value
+    )
 
 lazy val tests =
   project
     .in(file("tests"))
+    .settings(testSettings)
     .settings(
-      fork in Test := true,
-      javaOptions in Test += "-Dnative.bin=" + nativeLinkLL
-        .in(bindgen, Compile)
-        .value,
-      libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % Test
+      javaOptions in Test += "-Dnative.bin=" + nativeLinkLL.in(bindgen, Compile).value
     )
