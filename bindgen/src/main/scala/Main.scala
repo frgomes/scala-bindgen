@@ -8,6 +8,7 @@ case class Args(files: Seq[String] = Seq(),
                 pkg: String = "scalanative.native.bindings",
                 out: String = "",
                 recursive: Boolean = false,
+                verbose: Int = 0,
                 debug: Boolean = false)
 
 object CLI {
@@ -43,6 +44,10 @@ object CLI {
     opt[Unit]('d', "debug")
       .action((_, c) => c.copy(debug = true))
       .text("""Emit Clang AST to stderr.""")
+
+    opt[Unit]('v', "verbose")
+      .action((_, c) => c.copy(verbose = c.verbose + 1))
+      .text("""Increase verbosity.""")
 
     help("help")
       .text("""prints this usage text""")
@@ -82,7 +87,7 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
     val index: CXIndex = createIndex(0, 1)
     val xs =
       args.files.map { name =>
-        if (args.debug) cerr.println(name)
+        if (args.verbose > 0) cerr.println(name)
         val tu: CXTranslationUnit =
           parseTranslationUnit(index,
                                toCString(name),
@@ -96,15 +101,15 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
         else {
           val root: CXCursor = getTranslationUnitCursor(tu)
           assert(root != null)
-          val result = visitChildren(root, visitor, tree.cast[Data])
-          //TODO assert(result == CXChildVisit_Continue)
-          makeOutput(tree, resolve(args.chdir, args.out, name, ".h", ".scala"))
+          val result = visitChildren(root, visitor, tree.cast[Data]).toInt
+          if(args.verbose > 0) println(s"${result} ${name}")
+          if(result==0) makeOutput(tree, resolve(args.chdir, args.out, name, ".h", ".scala"))
           disposeTranslationUnit(tu)
-          result.toInt
+          result
         }
       }
     if (index != null) disposeIndex(index)
-    0 //FIXME: obtain from iterator
+    xs.sum
   }
 
   private def makeOutput(tree: Tree, out: String): Unit = {
