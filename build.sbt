@@ -18,8 +18,7 @@ lazy val platform: Seq[Setting[_]] =
 lazy val testSettings: Seq[Setting[_]] =
   Seq(
     fork in Test := true,
-    //TODO: libraryDependencies += "com.lihaoyi" %%% "utest" % "0.4.8-SNAPSHOT" % "test",
-    unmanagedJars in Test += new java.io.File("/tmp/utest_native0.3_2.11.jar"),
+    libraryDependencies += "com.lihaoyi" %%% "utest" % "0.4.8" % "test",
     testFrameworks += new TestFramework("utest.runner.Framework")
   )
 

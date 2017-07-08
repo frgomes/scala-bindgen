@@ -20,14 +20,7 @@ script:
       -v $HOME/.sbt:/root/.sbt \
       -v $HOME/.ivy2:/root/.ivy2 \
       -t rgomes/scalanative:1.0-M1 /bin/bash -c \
-         " cd /root; \
-           rm -r -f ~/.ivy2/cache/com.lihaoyi/ ~/.ivy2/local/com.lihaoyi/; \
-           git clone https://github.com/lihaoyi/utest; \
-           pushd utest; \
-           sbt clean +publishLocal; \
-           popd; \
-           wget -O /tmp/utest_native0.3_2.11.jar https://www.dropbox.com/sh/bb3p4grafp0027a/AAB7-L1d6fkNmVPVVajua5vRa/utest_native0.3_2.11.jar; \
-           cd /root/scala-bindgen; \
+         " cd /root/scala-bindgen; \
            bin/scalafmt --test; \
            bin/clangfmt --test; \
            sbt clean bindgen/test tests/test"
