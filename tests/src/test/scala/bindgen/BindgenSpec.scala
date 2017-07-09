@@ -11,11 +11,14 @@ object BindgenSpec extends TestSuite {
   def contentOf(name: String): String = contentOf(new File(name))
   def contentOf(file: File)  : String = Source.fromFile(file).getLines.mkString("\n")
 
-  val inputDir  = new File("src/test/resources/samples")
+  val inputDir   = "src/test/resources/samples"
+  val includeDir = "src/test/resources/samples/include"
+  val outputDir  = "target/bindgen-samples"
 
-  val outputDir = new File("target/bindgen-samples")
-  Option(outputDir.listFiles()).foreach(_.foreach(_.delete()))
-  outputDir.mkdirs()
+  Option(new File(outputDir)).foreach { dir =>
+    Option(dir.listFiles()).foreach { files => files.foreach { file => file.delete }}
+    dir.mkdirs
+  }
 
   val bin = sys.props.get("native.bin").getOrElse {
     sys.error("native.bin is not set")
@@ -27,12 +30,13 @@ object BindgenSpec extends TestSuite {
   val tests = this {
     "ability to generate bindings"-{
       for {
-        input <- inputDir.listFiles()                                                if input.getName.endsWith(".h")
-        expected = util.resolve(None, None, Option(input.toString), ".h", ".scala")  if (new File(expected)).exists
+        file  <- new File(inputDir).listFiles()
+        input    = file.toString                                            if input.endsWith(".h")
+        expected = util.resolve(None, None, Option(input), ".h", ".scala")  if (new File(expected)).exists
       } {
-        val actual = util.resolve(Option(outputDir.toString), None, Option(input.toString), ".h", ".scala")
+        val actual = util.resolve(Option(outputDir), None, Option(input), ".h", ".scala")
 
-        val cmd = Array(bin, "-v", "-d", "-o", actual, input.toString)
+        val cmd = Array(bin, "-v", "-v", "-d", "-o", actual, input, "--", "-I", includeDir)
         assert(Process(cmd).! == 0)
 
         assert((new File(actual)).exists)
