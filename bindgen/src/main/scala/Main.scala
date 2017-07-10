@@ -1,19 +1,17 @@
 package bindgen
 
-import java.io.{File, FileOutputStream, PrintStream}
 import scalanative.native._
 
-//see: http://bastian.rieck.ru/blog/posts/2015/baby_steps_libclang_ast/
 
-case class Args(files: Seq[String] = Seq(),
-                chdir: String = ".",
-                pkg: String = "scalanative.native.bindings",
-                out: PrintStream = System.out,
-                recursive: Boolean = false,
-                debug: Boolean = false)
+case class Args(files: Seq[String]    = Seq(),
+                chdir: Option[String] = None,
+                pkg: Option[String]   = Some("scalanative.native.bindings"),
+                out: Option[String]   = None,
+                recursive: Boolean    = false,
+                verbose: Int          = 0,
+                debug: Boolean        = false)
 
 object CLI {
-  //TODO: allow Clang args to be passed after a "--"
   val parser = new scopt.OptionParser[Args]("bindgen") {
     head("bindgen", "0.1")
 
@@ -24,23 +22,21 @@ object CLI {
       .text("""Header file(s) to be converted to Scala.""")
 
     opt[String]('C', "chdir")
+      .optional
       .valueName("DIR")
-      .action((x, c) => c.copy(chdir = x))
+      .action((x, c) => c.copy(chdir = Option(x)))
       .text("""Change to DIR before performing any operations.""")
 
     opt[String]('P', "package")
       .valueName("PACKAGE")
-      .action((x, c) => c.copy(pkg = x))
+      .action((x, c) => c.copy(pkg = Option(x)))
       .text("""Package name.""")
 
     opt[String]('o', "out")
+      .optional
       .valueName("FILE")
-      .action { (x, c) =>
-        val file = new File(x)
-        file.getParentFile().mkdirs()
-        c.copy(out = new PrintStream(new FileOutputStream(file)))
-      }
-      .text("""Output file.""")
+      .action((x, c) => c.copy(out = Option(x)))
+      .text("""Unified output file.""")
 
     opt[Unit]('r', "recursive")
       .action((_, c) => c.copy(recursive = true))
@@ -50,6 +46,10 @@ object CLI {
       .action((_, c) => c.copy(debug = true))
       .text("""Emit Clang AST to stderr.""")
 
+    opt[Unit]('v', "verbose")
+      .action((_, c) => c.copy(verbose = c.verbose + 1))
+      .text("""Increase verbosity.""")
+
     help("help")
       .text("""prints this usage text""")
   }
@@ -58,24 +58,28 @@ object CLI {
 object Main {
 
   def main(args: Array[String]): Unit = {
+    val (left, right) = args.span(item => "--" != item)
+    val cargs = if(right.isEmpty) Array[String]() else right.tail.toArray
     val errno: Int =
-      CLI.parser.parse(args, Args()) match {
-        case Some(a) => val g = new Generator(a); g.process
-        case None =>
-          -1 // arguments are bad, error message will have been displayed
+      CLI.parser.parse(left, Args()) match {
+        case Some(a) => (new Generator(a, cargs)).process
+        case None    => -1 // arguments are bad, error message will have been displayed
       }
 
     System.exit(errno)
   }
 }
 
-class Generator(c: Args) {
+class Generator(args: Args, cargs: Array[String]) extends FileUtils {
   import scala.scalanative.bindings.clang._
   import scala.scalanative.bindings.clang.api._
   import scala.collection.mutable.ListBuffer
 
+  import java.io.{File, FileOutputStream, PrintStream}
+
   private val tree    = new Object with Tree
   private val visitor = AST.visitor
+  private val cerr    = new PrintStream(System.err)
 
   def process: Int = Zone { implicit z =>
     val clang_argc: CInt         = 0
@@ -83,8 +87,9 @@ class Generator(c: Args) {
 
     val index: CXIndex = createIndex(0, 1)
     val xs =
-      c.files.map { name =>
-        if (c.debug) println(name)
+      args.files.map { name =>
+        if (args.debug || args.verbose > 0) cerr.println("----------------------------------------------")
+        if (args.verbose > 1) cerr.println(s"[${name}]")
         val tu: CXTranslationUnit =
           parseTranslationUnit(index,
                                toCString(name),
@@ -93,52 +98,115 @@ class Generator(c: Args) {
                                null,
                                0,
                                CXTranslationUnit_SkipFunctionBodies)
-        assert(tu != null) //XXX: This causes link error
-        if (tu == null) -1
-        else {
-          val root: CXCursor = getTranslationUnitCursor(tu)
-          assert(root != null)
-          if (c.debug) println("[about to call visitChildren]")
-          val result = visitChildren(root, visitor, tree.cast[Data])
-          disposeTranslationUnit(tu)
-          result.toInt
-        }
+        assert(tu != null)
+        val root: CXCursor = getTranslationUnitCursor(tu)
+        assert(root != null)
+        val result = visitChildren(root, visitor, tree.cast[Data]).toInt
+        if(args.verbose > 0) println(s"${result} ${name}")
+        if(result==0) makeOutput(tree, resolve(args.chdir, args.out, Option(name), ".h", ".scala"))
+        disposeTranslationUnit(tu)
+        if (args.debug || args.verbose > 0) cerr.println("----------------------------------------------")
+        result
       }
     if (index != null) disposeIndex(index)
+    xs.sum
+  }
 
-    println("----------------------------------------------")
-    println(s"typedefs.size  = ${tree.typedefs.size}")
-    println(s"enums.size     = ${tree.enums.size}")
-    println(s"functions.size = ${tree.functions.size}")
-    println("----------------------------------------------")
+  private def makeOutput(tree: Tree, out: String): Unit = {
+    val cout = if("-" == out) new PrintStream(System.out) else new PrintStream(new FileOutputStream(mkdirs(out)))
+
+    if(args.debug) {
+      cerr.println(s"typedefs.size  = ${tree.typedefs.size}")
+      cerr.println(s"enums.size     = ${tree.enums.size}")
+      cerr.println(s"functions.size = ${tree.functions.size}")
+    }
 
     tree.typedefs.foreach { entry =>
-      c.out.println(s"type ${entry.name} = ${entry.underlying}")
+      cout.println(s"type ${entry.name} = ${entry.underlying}")
     }
 
     tree.enums.foreach { entry =>
-      c.out.println(s"object ${entry.name}_Enum {")
-      c.out.println(
+      cout.println(s"object ${entry.name}_Enum {")
+      cout.println(
         entry.values
           .map(enum => s"  val ${enum.name} = ${enum.value}")
           .mkString("\n"))
-      c.out.println("}")
+      cout.println("}")
     }
 
     tree.functions.foreach { entry =>
-      c.out.println(s"def ${entry.name}(")
-      c.out.println(
+      cout.println(s"def ${entry.name}(")
+      cout.println(
         entry.args
           .map(param => s"  ${param.name}: ${param.tpe}")
           .mkString("\n"))
-      c.out.println(s"  ): ${entry.returnType} = extern")
+      cout.println(s"  ): ${entry.returnType} = extern")
     }
 
-    c.out.flush()
-    c.out.close()
-
-    0 //TODO: obtain from iterator
+    cout.flush()
+    if("-" != out) cout.close
   }
+}
+
+
+trait FileUtils {
+  import java.io.File
+  import java.nio.file.Paths
+  import java.nio.file.Path
+
+ // def mkdirs(name: Option[String])
+  def mkdirs(name: String): File = mkdirs(Paths.get(name).toFile)
+  def mkdirs(file: java.io.File): File = {
+    val dir = file.getParentFile
+    if(!dir.isDirectory)
+      if (!dir.mkdirs)
+        throw new java.io.IOException(s"Cannot create directory ${dir.toString}")
+    file
+  }
+
+  private def resolve(chdir: Option[String], name: Option[String]): String = {
+    val dir  =
+      chdir match {
+        case None     => "."
+        case Some("") => "."
+        case Some(d)  => d
+      }
+    val path =
+      if(name.isEmpty)
+        throw new IllegalArgumentException("Cannot access a null name.")
+      else
+        Paths.get(name.get)
+    if(path.isAbsolute) path.toString else Paths.get(dir, path.toString).toString
+  }
+
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String]): String =
+    name match {
+      case Some("-") => "-"
+      case None      => resolve(chdir, default)
+      case Some("")  => resolve(chdir, default)
+      case _         => resolve(chdir, name)
+    }
+
+  def resolve(chdir: Option[String], name: Option[String], default: Option[String], from: String, to: String): String = {
+    def replaceThenResolve: String = {
+        val name = default.getOrElse(throw new IllegalArgumentException("Cannot enforce extension on a null default name."))
+        resolve(chdir, Option(name.replace(from, to)))
+    }
+    name match {
+      case Some("-") => "-"
+      case None      => replaceThenResolve
+      case Some("")  => replaceThenResolve
+      case _         => resolve(chdir, name)
+    }
+  }
+
+  // Java-like API
+
+  def resolve(chdir: String, name: String, default: String): String =
+    resolve(Option(chdir), Option(name), Option(default))
+
+  def resolve(chdir: String, name: String, default: String, from: String, to: String): String =
+    resolve(Option(chdir), Option(name), Option(default), from, to)
 }
 
 object AST {
@@ -223,20 +291,22 @@ object AST {
     }
 }
 
+
 trait Tree {
   import scala.collection.mutable.ListBuffer
-  val typedefs: ListBuffer[Typedef]   = ListBuffer()
+  val typedefs : ListBuffer[Typedef]  = ListBuffer()
   val functions: ListBuffer[Function] = ListBuffer()
-  val enums: ListBuffer[Enum]         = ListBuffer()
+  val enums    : ListBuffer[Enum]     = ListBuffer()
 }
 
 sealed trait Node
-case class Typedef(name: String, underlying: String) extends Node
+case class Typedef (name: String,
+                    underlying: String)        extends Node
 case class Function(name: String,
                     returnType: String,
-                    args: Seq[Function.Param])
-    extends Node
-case class Enum(name: String, values: Seq[Enum.Value]) extends Node
+                    args: Seq[Function.Param]) extends Node
+case class Enum    (name: String,
+                    values: Seq[Enum.Value])   extends Node
 
 object Function {
   case class Param(name: String, tpe: String)

@@ -21,9 +21,9 @@ script:
       -v $HOME/.ivy2:/root/.ivy2 \
       -t rgomes/scalanative:1.0-M1 /bin/bash -c \
          " cd /root/scala-bindgen; \
-           bin/scalafmt --test
-           bin/clangfmt --test
-           sbt clean tests/test"
+           bin/scalafmt --test; \
+           bin/clangfmt --test; \
+           sbt clean bindgen/test tests/test"
 
 before_cache:
   - find $HOME/.sbt -name "*.lock" | xargs rm
