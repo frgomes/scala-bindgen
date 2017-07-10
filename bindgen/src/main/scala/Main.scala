@@ -47,6 +47,7 @@ object CLI {
       .text("""Emit Clang AST to stderr.""")
 
     opt[Unit]('v', "verbose")
+      .minOccurs(0).maxOccurs(10)
       .action((_, c) => c.copy(verbose = c.verbose + 1))
       .text("""Increase verbosity.""")
 
@@ -82,25 +83,25 @@ class Generator(args: Args, cargs: Array[String]) extends FileUtils {
   private val cerr    = new PrintStream(System.err)
 
   def process: Int = Zone { implicit z =>
-    val clang_argc: CInt         = 0
-    val clang_argv: Ptr[CString] = null //TODO: c.clang_args.zipWithIndex.foreach { case (p, i) => clang_argv(i) = p }
+    val cargc: CInt = cargs.length
+    val cargv: Ptr[CString] = stackalloc[CString](cargs.length)
+    var i = 0; while(i<cargc) { cargv(i) = toCString(cargs(i)); i = i + 1 }
 
     val index: CXIndex = createIndex(0, 1)
     val xs =
       args.files.map { name =>
-        if (args.debug || args.verbose > 0) cerr.println("----------------------------------------------")
         if (args.verbose > 1) cerr.println(s"[${name}]")
         val tu: CXTranslationUnit =
           parseTranslationUnit(index,
                                toCString(name),
-                               clang_argv,
-                               clang_argc,
+                               cargv,
+                               cargc,
                                null,
                                0,
                                CXTranslationUnit_SkipFunctionBodies)
-        assert(tu != null)
+        if(tu == null) throw new RuntimeException("CXTranslationUnit is null")
         val root: CXCursor = getTranslationUnitCursor(tu)
-        assert(root != null)
+        if(root == null) throw new RuntimeException("CXCursor is null")
         val result = visitChildren(root, visitor, tree.cast[Data]).toInt
         if(args.verbose > 0) println(s"${result} ${name}")
         if(result==0) makeOutput(tree, resolve(args.chdir, args.out, Option(name), ".h", ".scala"))
