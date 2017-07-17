@@ -249,8 +249,8 @@ object AST {
                                fromCString(typedefTypeSpelling))
 
     } else {
-      val name         = getCursorSpelling(cursor)
-      val kindSpelling = getCursorKindSpelling(kind)
+      val name         = fromCString(getCursorSpelling(cursor))
+      val kindSpelling = fromCString(getCursorKindSpelling(kind))
       println(s"Unhandled cursor kind for ${name}: ${kindSpelling}")
     }
 
