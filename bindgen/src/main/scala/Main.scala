@@ -12,8 +12,18 @@ case class Args(files: Seq[String]    = Seq(),
                 debug: Boolean        = false)
 
 object CLI {
-  val parser = new scopt.OptionParser[Args]("bindgen") {
-    head("bindgen", "0.1")
+  val appName    = buildinfo.BuildInfo.name
+  val appVersion = buildinfo.BuildInfo.version
+  val parser = new scopt.OptionParser[Args](appName) {
+    head(appName, appVersion)
+
+    note(s"""  ${appName} is binding generator for Scala Native
+            |  
+            |
+            |  ${appName} [options...] <files...> [ -- Clang-options...]
+            |
+            |Options:
+            |""".stripMargin)
 
     arg[String]("files...")
       .unbounded()

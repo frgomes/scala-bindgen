@@ -1,9 +1,14 @@
 import scalanative.sbtplugin.ScalaNativePluginInternal._
 
-organization := "org.scala-native"
-name := "scala-bindgen"
+lazy val buildSettings: Seq[Setting[_]] =
+  Seq(
+    organization := "org.scala-native",
+    name := "bindgen",
+    buildInfoKeys := Seq[BuildInfoKey](organization, name, version, scalaVersion, sbtVersion),
+    buildInfoPackage := name.value + ".buildinfo"
+  )
 
-lazy val platform: Seq[Setting[_]] =
+lazy val platformSettings: Seq[Setting[_]] =
   Seq(
     scalaVersion := "2.11.11",
     libraryDependencies ++=
@@ -22,14 +27,13 @@ lazy val testSettings: Seq[Setting[_]] =
     testFrameworks += new TestFramework("utest.runner.Framework")
   )
 
-lazy val disableDocs: Seq[Setting[_]] =
-  Seq(sources in doc in Compile := List())
-
 lazy val bindgen =
   project
     .in(file("bindgen"))
     .enablePlugins(ScalaNativePlugin)
-    .settings(platform)
+    .enablePlugins(BuildInfoPlugin)
+    .settings(buildSettings)
+    .settings(platformSettings)
     .settings(testSettings)
     .settings(
       nativeCompileLL in Compile += {
